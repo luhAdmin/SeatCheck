@@ -1,3 +1,9 @@
+> **Status: v0.1 — early testing.** This tool works but has only been tested
+> against a handful of tenants. If you hit an error, please
+> [open an issue](https://github.com/luhAdmin/SeatCheck/issues) with the
+> terminal output — I read them all and turnaround is usually same-day.
+> Contributions welcome.
+
 # SeatCheck — Running it on your Mac
 
 This is a walkthrough for running SeatCheck for the first time. Every command
