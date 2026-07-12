@@ -32,6 +32,7 @@ from reportlab.platypus import (
 
 from config import (
     SKU_PRICES, SKU_FRIENDLY_NAMES, HIDDEN_SKUS, HIGH_VALUE_SKUS,
+    SKU_DOWNGRADE_SUGGESTIONS, SKU_REVIEW_QUESTIONS,
     INACTIVITY_DAYS,
 )
 
@@ -410,6 +411,16 @@ def analyze(data: dict) -> dict:
         days_activity = min(
             (days_since(d) for d in activity_dates if d), default=None
         )
+        # Per-workload heatmap data — days since last activity per workload
+        workload_activity = {
+            "Exchange": days_since(user["activity"].get("exchange")),
+            "OneDrive": days_since(user["activity"].get("onedrive")),
+            "SharePoint": days_since(user["activity"].get("sharepoint")),
+            "Teams": days_since(
+                user["activity"].get("teams")
+                or user["activity"].get("teams_detail")
+            ),
+        }
         watchlist.append({
             "display_name": user["display_name"],
             "upn": user["upn"],
@@ -418,6 +429,7 @@ def analyze(data: dict) -> dict:
             "last_signin_days": days_since(user["last_signin"]),
             "last_activity_days": days_activity,
             "enabled": user["enabled"],
+            "workload_activity": workload_activity,
         })
     watchlist.sort(key=lambda w: -w["monthly_cost"])
 
@@ -608,7 +620,203 @@ def build_pdf(report: dict, tenant_name: str, out_path: str):
 
     story.append(PageBreak())
 
-    # ── Per-user findings ──
+    # ── Expensive licenses — usage check (the star section) ──
+    watchlist = report.get("watchlist", [])
+    if watchlist:
+        story.append(PageBreak())
+        story.append(Paragraph("Expensive licenses — usage check", h2))
+
+        # Cost-of-ownership summary at the top
+        total_wl_cost = sum(w["monthly_cost"] for w in watchlist)
+        story.append(Paragraph(
+            f"<b>{len(watchlist)} users are holding high-value licenses "
+            f"totaling {fmt_money(total_wl_cost)}/month "
+            f"({fmt_money(total_wl_cost * 12)}/year).</b> Even a 20% "
+            f"right-sizing after review = "
+            f"<b>{fmt_money(total_wl_cost * 12 * 0.2)}/year saved</b>. "
+            f"This section is a conversation-starter, not an automatic "
+            f"recommendation — walk through each user with the customer "
+            f"during the renewal review and confirm the license matches "
+            f"actual usage patterns.",
+            body,
+        ))
+        story.append(Spacer(1, 10))
+
+        # Heatmap legend
+        legend = (
+            'Workload activity legend: '
+            '<font color="#10B981" name="Helvetica-Bold">■</font> active in '
+            'last 30d &nbsp;·&nbsp; '
+            '<font color="#F59E0B" name="Helvetica-Bold">■</font> 30–90d ago '
+            '&nbsp;·&nbsp; '
+            '<font color="#EF4444" name="Helvetica-Bold">■</font> 90d+ ago '
+            '&nbsp;·&nbsp; '
+            '<font color="#CBD5E1" name="Helvetica-Bold">■</font> no activity'
+        )
+        story.append(Paragraph(legend, small))
+        story.append(Spacer(1, 12))
+
+        # Styles used inside cards
+        card_name = ParagraphStyle(
+            "card_name", parent=styles["Normal"], fontSize=11,
+            leading=13, textColor=colors.HexColor("#0F172A"),
+            fontName="Helvetica-Bold",
+        )
+        card_meta = ParagraphStyle(
+            "card_meta", parent=styles["Normal"], fontSize=9,
+            leading=12, textColor=colors.HexColor("#475569"),
+        )
+        card_action = ParagraphStyle(
+            "card_action", parent=styles["Normal"], fontSize=9,
+            leading=12, textColor=colors.HexColor("#0F172A"),
+            leftIndent=6,
+        )
+        card_prompt = ParagraphStyle(
+            "card_prompt", parent=styles["Normal"], fontSize=9,
+            leading=12, textColor=colors.HexColor("#7C3AED"),  # purple
+            leftIndent=6, fontName="Helvetica-Oblique",
+        )
+
+        def heatmap_html(workload_activity: dict) -> str:
+            """Build inline colored squares for the workload heatmap."""
+            parts = []
+            for workload, days in workload_activity.items():
+                if days is None:
+                    color = "#CBD5E1"  # gray — no activity
+                elif days <= 30:
+                    color = "#10B981"  # green
+                elif days <= 90:
+                    color = "#F59E0B"  # amber
+                else:
+                    color = "#EF4444"  # red
+                parts.append(
+                    f'<font color="{color}" name="Helvetica-Bold">■</font> '
+                    f'<font size="7" color="#64748B">{workload[:4]}</font>'
+                )
+            return " &nbsp; ".join(parts)
+
+        # Render one card per user, up to 40 users (2-3 cards per page)
+        cards_rendered = 0
+        for w in watchlist[:40]:
+            name = w["display_name"] or w["upn"] or "—"
+            if not w["enabled"]:
+                name = f"{name} (disabled)"
+
+            cost_str = fmt_money(w["monthly_cost"]) if w["monthly_cost"] else "?"
+            signin = (
+                f"{w['last_signin_days']}d ago"
+                if w["last_signin_days"] is not None
+                else "never"
+            )
+            activity = (
+                f"{w['last_activity_days']}d ago"
+                if w["last_activity_days"] is not None
+                else "no activity"
+            )
+            sku_names = [
+                SKU_FRIENDLY_NAMES.get(s, s) for s in w["high_value_skus"]
+            ]
+            skus_html = ", ".join(sku_names)
+
+            # Collect distinct downgrade suggestions & questions across all
+            # high-value SKUs the user holds (usually just 1-2)
+            suggestions = []
+            questions = []
+            for sku in w["high_value_skus"]:
+                s = SKU_DOWNGRADE_SUGGESTIONS.get(sku)
+                q = SKU_REVIEW_QUESTIONS.get(sku)
+                if s and s not in suggestions:
+                    suggestions.append(s)
+                if q and q not in questions:
+                    questions.append(q)
+
+            # Build the card as a 2-column table:
+            # Left = user info; Right = cost + heatmap
+            top_row = Table(
+                [[
+                    Paragraph(name, card_name),
+                    Paragraph(
+                        f'<para align="right"><b>{cost_str}/mo</b></para>',
+                        card_meta,
+                    ),
+                ]],
+                colWidths=[4.5 * inch, 1.8 * inch],
+            )
+            top_row.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]))
+
+            meta_row = Table(
+                [[
+                    Paragraph(
+                        f"<b>Licenses:</b> {skus_html}<br/>"
+                        f"<b>Last sign-in:</b> {signin} &nbsp;·&nbsp; "
+                        f"<b>Last workload activity:</b> {activity}",
+                        card_meta,
+                    ),
+                    Paragraph(
+                        heatmap_html(w["workload_activity"]),
+                        card_meta,
+                    ),
+                ]],
+                colWidths=[4.5 * inch, 1.8 * inch],
+            )
+            meta_row.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+
+            # Assemble the card as a single-cell table with a light background
+            card_content = [top_row, meta_row]
+            if questions:
+                q_text = "  ".join(f"• {q}" for q in questions)
+                card_content.append(Paragraph(
+                    f"<b>Ask them:</b> {q_text}",
+                    card_prompt,
+                ))
+            if suggestions:
+                s_text = "  ".join(f"• {s}" for s in suggestions)
+                card_content.append(Paragraph(
+                    f"<b>Consider:</b> {s_text}",
+                    card_action,
+                ))
+
+            card = Table(
+                [[card_content]],
+                colWidths=[6.5 * inch],
+            )
+            card.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ]))
+            story.append(card)
+            story.append(Spacer(1, 8))
+            cards_rendered += 1
+
+        if len(watchlist) > 40:
+            story.append(Spacer(1, 6))
+            story.append(Paragraph(
+                f"Showing top {cards_rendered} of {len(watchlist)} "
+                f"high-value seats (sorted by monthly cost). Remaining users "
+                f"available in the CSV export.",
+                small,
+            ))
+
+
+    story.append(PageBreak())
+
+        # ── Per-user findings ──
     story.append(Paragraph("Recommendations by user", h2))
     story.append(Paragraph(
         f"{len(report['findings'])} users flagged. Sorted by monthly savings. "
@@ -677,77 +885,6 @@ def build_pdf(report: dict, tenant_name: str, out_path: str):
             story.append(Paragraph(
                 f"Showing top 80 of {len(report['findings'])} findings. "
                 f"Full list available in the CSV export.",
-                small,
-            ))
-
-    # ── High-value seat watchlist ──
-    watchlist = report.get("watchlist", [])
-    if watchlist:
-        story.append(PageBreak())
-        story.append(Paragraph("High-value seat watchlist", h2))
-        story.append(Paragraph(
-            "Every user holding an expensive license (E5, Business Central, "
-            "Dynamics 365, Copilot, Power Apps per-user, etc.). Not necessarily "
-            "waste — but each is worth asking \"does this person actually need "
-            "this?\" during a renewal review. Sorted by monthly cost.",
-            small,
-        ))
-        story.append(Spacer(1, 8))
-        wl_data = [["User", "License(s)", "$/mo", "Last sign-in", "Last activity"]]
-        for w in watchlist[:60]:
-            name = w["display_name"] or w["upn"] or "—"
-            if not w["enabled"]:
-                name = f"{name} (disabled)"
-            if len(name) > 28:
-                name = name[:25] + "…"
-            skus_display = ", ".join(
-                SKU_FRIENDLY_NAMES.get(s, s) for s in w["high_value_skus"]
-            )
-            if len(skus_display) > 42:
-                skus_display = skus_display[:39] + "…"
-            signin = (
-                f"{w['last_signin_days']}d ago"
-                if w["last_signin_days"] is not None
-                else "never"
-            )
-            activity = (
-                f"{w['last_activity_days']}d ago"
-                if w["last_activity_days"] is not None
-                else "none"
-            )
-            wl_data.append([
-                name,
-                Paragraph(skus_display, body),
-                fmt_money(w["monthly_cost"]) if w["monthly_cost"] else "?",
-                signin,
-                activity,
-            ])
-        wl_tbl = Table(
-            wl_data,
-            colWidths=[1.8 * inch, 2.4 * inch, 0.7 * inch, 0.9 * inch, 1.0 * inch],
-            repeatRows=1,
-        )
-        wl_tbl.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1),
-             [colors.white, colors.HexColor("#F8FAFC")]),
-            ("ALIGN", (2, 0), (2, -1), "RIGHT"),
-            ("ALIGN", (3, 0), (4, -1), "CENTER"),
-            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E2E8F0")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 6),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ]))
-        story.append(wl_tbl)
-        if len(watchlist) > 60:
-            story.append(Spacer(1, 6))
-            story.append(Paragraph(
-                f"Showing top 60 of {len(watchlist)} high-value seats.",
                 small,
             ))
 

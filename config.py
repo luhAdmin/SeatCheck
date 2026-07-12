@@ -184,3 +184,96 @@ SKU_FRIENDLY_NAMES = {
     "DYN365_ENTERPRISE_TEAM_MEMBERS": "Dynamics 365 Team Members",
     "DYN365_TEAM_MEMBERS": "Dynamics 365 Team Members",
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Downgrade suggestions per high-value SKU — what to consider instead.
+# Empty string = no straightforward downgrade path (just review necessity).
+# ─────────────────────────────────────────────────────────────────────────────
+SKU_DOWNGRADE_SUGGESTIONS = {
+    "SPE_E5": "Consider Microsoft 365 E3 (−$21/mo/user) if user doesn't need "
+              "Defender for O365 P2, Power BI Pro, Audio Conferencing, or "
+              "advanced security/compliance features.",
+    "ENTERPRISEPREMIUM": "Consider Office 365 E3 (−$15/mo/user) if user "
+                        "doesn't need Defender for O365 P2 or Power BI Pro.",
+    "DYN365_BUSCENTRAL_PREMIUM": "Consider Business Central Essentials "
+                                 "(−$30/mo/user) if user doesn't use "
+                                 "manufacturing, service management, or "
+                                 "advanced warehouse features.",
+    "DYN365_BUSCENTRAL_ESSENTIAL": "Consider Business Central Team Member "
+                                   "(−$62/mo/user) if user only reads data or "
+                                   "does light approvals (no full transactions).",
+    "DYN365_BUSCENTRAL_ESSENTIALS": "Consider Business Central Team Member "
+                                    "(−$62/mo/user) if user only reads data "
+                                    "or does light approvals.",
+    "DYN365_ENTERPRISE_SALES": "Consider Sales Professional (−$30/mo/user) if "
+                              "user doesn't need forecasting, territory "
+                              "management, or advanced sales automation.",
+    "DYN365_SALES_PREMIUM": "Consider Sales Enterprise (−$40/mo/user) if user "
+                           "doesn't use AI-powered sales insights or "
+                           "conversation intelligence.",
+    "DYN365_ENTERPRISE_CUSTOMER_SERVICE": "Consider Customer Service "
+                                          "Professional (−$45/mo/user) if user "
+                                          "doesn't need unified routing, "
+                                          "knowledge management, or SLAs.",
+    "DYN365_CUSTOMER_SERVICE_ENTERPRISE": "Consider Customer Service "
+                                          "Professional (−$45/mo/user) if user "
+                                          "doesn't need unified routing or SLAs.",
+    "DYN365_ENTERPRISE_FIELD_SERVICE": "Confirm this user is a field technician "
+                                       "or dispatcher — if they only view "
+                                       "records, a Team Member seat may suffice.",
+    "Microsoft_365_Copilot": "Verify sustained usage — pilot Copilot seats "
+                             "often go unused after 60–90 days. If usage is "
+                             "occasional, consider reassigning to a heavier user.",
+    "POWERAPPS_PER_USER": "If user only runs 1–2 apps, Power Apps per-app "
+                          "(−$15/mo/user) is cheaper.",
+    "POWER_BI_PREMIUM_PER_USER": "If user only consumes reports (doesn't "
+                                 "author), Power BI Pro (−$10/mo/user) suffices.",
+    "PROJECTPROFESSIONAL": "Consider Project Plan 1 (−$20/mo/user) if user "
+                          "doesn't author project plans (only views/updates).",
+    "PROJECTPREMIUM": "Consider Project Plan 3 (−$25/mo/user) if user doesn't "
+                     "use portfolio management or demand management.",
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Conversation prompts — what to ask this user during a renewal review.
+# Kept practical and specific to the SKU.
+# ─────────────────────────────────────────────────────────────────────────────
+SKU_REVIEW_QUESTIONS = {
+    "SPE_E5": "Do you regularly use Defender/security features, Power BI, "
+              "or Audio Conferencing? If not, E3 is likely enough.",
+    "ENTERPRISEPREMIUM": "Do you use Power BI Pro or advanced compliance "
+                        "features? If not, Office 365 E3 is likely enough.",
+    "DYN365_BUSCENTRAL_PREMIUM": "Do you use manufacturing, service management, "
+                                 "or advanced warehouse features in Business "
+                                 "Central? Or do you mainly work with finance, "
+                                 "sales, purchasing, and basic inventory?",
+    "DYN365_BUSCENTRAL_ESSENTIAL": "Do you enter transactions in Business "
+                                   "Central, or mostly view reports and approve?",
+    "DYN365_BUSCENTRAL_ESSENTIALS": "Do you enter transactions in Business "
+                                    "Central, or mostly view reports and approve?",
+    "DYN365_ENTERPRISE_SALES": "Do you use forecasting, territory management, "
+                              "or advanced sales automation? Or is Dynamics "
+                              "mostly a contact/deal tracker for you?",
+    "DYN365_SALES_PREMIUM": "Do you actually use the AI sales insights and "
+                           "conversation intelligence features?",
+    "DYN365_ENTERPRISE_CUSTOMER_SERVICE": "Do you handle multi-channel cases "
+                                          "with routing rules and SLAs? Or "
+                                          "mostly simple ticket tracking?",
+    "DYN365_CUSTOMER_SERVICE_ENTERPRISE": "Do you use unified routing and "
+                                          "SLA management? Or simpler ticketing?",
+    "DYN365_ENTERPRISE_FIELD_SERVICE": "Are you dispatching or performing "
+                                       "field service work, or just viewing "
+                                       "records?",
+    "Microsoft_365_Copilot": "How often do you actually use Copilot in Word, "
+                             "Excel, Outlook, or Teams? Weekly? Daily? "
+                             "Occasionally?",
+    "POWERAPPS_PER_USER": "How many Power Apps do you actively use? If just "
+                          "1 or 2, per-app licensing is cheaper.",
+    "POWER_BI_PREMIUM_PER_USER": "Do you build/publish reports, or mainly "
+                                 "consume them?",
+    "PROJECTPROFESSIONAL": "Do you author project plans in Project, or mainly "
+                          "view timelines and update task status?",
+    "PROJECTPREMIUM": "Do you use portfolio-level features (portfolio "
+                     "management, demand management)?",
+}
